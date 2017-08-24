@@ -1,0 +1,23 @@
+{
+  "name": "codeship-restart-lambda",
+  "version": "0.0.1",
+  "description": "Restart the last build of a Codeship project using Lambda",
+  "engines": {
+    "node": ">=6.10.0"
+  },
+  "main": "index.js",
+  "scripts": {
+    "setup": "./node_modules/.bin/node-lambda setup",
+    "test": "./node_modules/.bin/node-lambda run",
+    "package": "./node_modules/.bin/node-lambda package",
+    "deploy": "./node_modules/.bin/node-lambda deploy -f ./deploy.env"
+  },
+  "author": "Trolleymusic",
+  "license": "ISC",
+  "dependencies": {
+    "codeship-node": "^0.2.0"
+  },
+  "devDependencies": {
+    "node-lambda": "^0.11.3"
+  }
+}

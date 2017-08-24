@@ -1,0 +1,8 @@
+node_modules
+build
+.lambda
+.env
+event.json
+deploy.env
+context.json
+event_sources.json
