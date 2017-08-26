@@ -19,3 +19,4 @@ Restart the last build of a Codeship project using Lambda
 ### TODO:
 
 * Currently `npm run deploy` isn't working. It seems to be but then the function never shows up in Lambda - get this working so I don't have to upload anything
+* Expects to be called from API gateway so it returns response objects formatted for that, do I need to accommodate multiple types of response?

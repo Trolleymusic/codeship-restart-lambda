@@ -4,6 +4,8 @@ const repositoryName = process.env.CODESHIP_REPOSITORY_NAME
 const branchName = process.env.CODESHIP_BRANCH_NAME
 const testing = process.env.CODESHIP_TESTING === 'true'
 
+const headers = { 'Content-Type': 'application/json' }
+
 const CodeshipWrapper = require('./codeship-node-promise-wrapper')
 const Codeship = new CodeshipWrapper({apiKey})
 
@@ -22,22 +24,46 @@ function restartLastBuild (repositoryName, branchName = 'master') {
     // TODO: make testing abort more graceful
     .then(build => {
       console.log(`${build.id} is last build`)
-      return testing ? Promise.reject('Aborted early because of CODESHIP_TESTING flag') : Codeship.restartBuild(build.id)
+      const message = 'Aborting early because of CODESHIP_TESTING flag'
+      return testing ? Promise.reject(new Error(message)) : Codeship.restartBuild(build.id)
     })
     .then(newBuild => {
       console.log('New build returned', newBuild)
-      return (newBuild.status === 'initiated' && !newBuild.finished_at) ? newBuild : Promise.reject(newBuild)
+      if (newBuild.status !== 'initiated' || newBuild.finished_at) {
+        const message = 'Build did not return as expected'
+        return Promise.reject(new Error(message))
+      }
+      return newBuild
     })
+}
+
+function apiGatewayResponse ({body, code}) {
+  return {
+    isBase64Encoded: false,
+    statusCode: code,
+    headers: headers,
+    body: JSON.stringify(body)
+  }
 }
 
 exports.handler = function (event, context, callback) {
   return restartLastBuild(repositoryName, branchName)
     .then(newBuild => {
       console.info('Build was restarted', JSON.stringify(newBuild))
-      return callback(null, newBuild)
+
+      const code = 200
+      const body = newBuild
+      const response = apiGatewayResponse({body, code})
+      return callback(null, response)
     })
     .catch(error => {
-      console.error('Error:', error)
-      return callback(error)
+      console.info('Error:', error)
+
+      const body = {
+        error: error.message
+      }
+      const code = 400
+      const response = apiGatewayResponse({body, code})
+      return callback(null, response)
     })
 }
