@@ -3,11 +3,33 @@ const apiKey = process.env.CODESHIP_API_KEY
 const repositoryName = process.env.CODESHIP_REPOSITORY_NAME
 const branchName = process.env.CODESHIP_BRANCH_NAME
 const testing = process.env.CODESHIP_TESTING === 'true'
+const includeTags = process.env.CODESHIP_INCLUDE_TAGS === 'true'
 
 const headers = { 'Content-Type': 'application/json' }
 
 const CodeshipWrapper = require('./codeship-node-promise-wrapper')
 const Codeship = new CodeshipWrapper({apiKey})
+
+const tagRegex = /v(\d+\.\d+\.\d+)/
+
+function restartBuild (build) {
+  console.log(`${build.id} is last build of branch ${build.branch}`)
+
+  if (testing) {
+    const message = 'Aborting early because of CODESHIP_TESTING flag'
+    return Promise.reject(new Error(message))
+  }
+
+  return Codeship.restartBuild(build.id)
+    .then(newBuild => {
+      console.log('New build returned', newBuild)
+      if (newBuild.status !== 'initiated' || newBuild.finished_at) {
+        const message = 'Build did not return as expected'
+        return Promise.reject(new Error(message))
+      }
+      return newBuild
+    })
+}
 
 function restartLastBuild (repositoryName, branchName = 'master') {
   console.log(`Ready to query Codeship for ${repositoryName}:${branchName}`)
@@ -19,22 +41,18 @@ function restartLastBuild (repositoryName, branchName = 'master') {
     .then(project => {
       console.log(`${project.builds.length} build(s) found for ${project.repository_provider}:${project.repository_name}`)
       console.log(`Filtering builds to target ${branchName}`)
-      return project.builds.filter(build => build.branch === branchName).shift()
+      const buildsMap = project.builds.reduce((builds, build) => {
+        if (!includeTags && tagRegex.test(build.branch)) {
+          return builds
+        }
+        if (branchName === '*' || branchName === build.branch) {
+          builds[build.branch] = [...(builds[build.branch] || []), build]
+        }
+        return builds
+      }, {})
+      return Object.keys(buildsMap).map(key => buildsMap[key].shift())
     })
-    // TODO: make testing abort more graceful
-    .then(build => {
-      console.log(`${build.id} is last build`)
-      const message = 'Aborting early because of CODESHIP_TESTING flag'
-      return testing ? Promise.reject(new Error(message)) : Codeship.restartBuild(build.id)
-    })
-    .then(newBuild => {
-      console.log('New build returned', newBuild)
-      if (newBuild.status !== 'initiated' || newBuild.finished_at) {
-        const message = 'Build did not return as expected'
-        return Promise.reject(new Error(message))
-      }
-      return newBuild
-    })
+    .then(builds => Promise.all(builds.map(build => restartBuild(build))))
 }
 
 function apiGatewayResponse ({body, code}) {
@@ -48,11 +66,12 @@ function apiGatewayResponse ({body, code}) {
 
 exports.handler = function (event, context, callback) {
   return restartLastBuild(repositoryName, branchName)
-    .then(newBuild => {
-      console.info('Build was restarted', JSON.stringify(newBuild))
+    .then(newBuilds => {
+      const action = newBuilds.length > 1 ? 'builds were restarted' : 'build was restarted'
+      console.info(`${newBuilds.length} ${action}`, JSON.stringify(newBuilds))
 
       const code = 200
-      const body = newBuild
+      const body = newBuilds
       const response = apiGatewayResponse({body, code})
       return callback(null, response)
     })
