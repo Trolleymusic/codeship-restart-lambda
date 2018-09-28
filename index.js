@@ -1,5 +1,10 @@
 'use strict'
-const apiKey = process.env.CODESHIP_API_KEY
+const CodeshipAPI = require('codeship-node-v2')
+
+const orgUuid = process.env.CODESHIP_ORG_UUID
+const orgName = process.env.CODESHIP_ORG_NAME
+const username = process.env.CODESHIP_USERNAME
+const password = process.env.CODESHIP_PASSWORD
 const repositoryName = process.env.CODESHIP_REPOSITORY_NAME
 const branchName = process.env.CODESHIP_BRANCH_NAME
 const testing = process.env.CODESHIP_TESTING === 'true'
@@ -7,41 +12,34 @@ const includeTags = process.env.CODESHIP_INCLUDE_TAGS === 'true'
 
 const headers = { 'Content-Type': 'application/json' }
 
-const CodeshipWrapper = require('./codeship-node-promise-wrapper')
-const Codeship = new CodeshipWrapper({apiKey})
+const Codeship = new CodeshipAPI({ orgUuid, orgName, username, password })
 
 const tagRegex = /v(\d+\.\d+\.\d+)/
 
 function restartBuild (build) {
-  console.log(`${build.id} is last build of branch ${build.branch}`)
+  console.log(`${build.uuid} is last build of branch ${build.branch}`)
 
   if (testing) {
     const message = 'Aborting early because of CODESHIP_TESTING flag'
     return Promise.reject(new Error(message))
   }
 
-  return Codeship.restartBuild(build.id)
-    .then(newBuild => {
-      console.log('New build returned', newBuild)
-      if (newBuild.status !== 'initiated' || newBuild.finished_at) {
-        const message = 'Build did not return as expected'
-        return Promise.reject(new Error(message))
-      }
-      return newBuild
-    })
+  return Codeship.builds.restart(build.uuid)
+    .then(() => (build.uuid))
 }
 
 function restartLastBuild (repositoryName, branchName = 'master') {
   console.log(`Ready to query Codeship for ${repositoryName}:${branchName}`)
-  return Codeship.listProjects()
+  return Codeship.projects.list()
     .then(projects => {
       console.log(`${projects.length} project(s) found`)
-      return projects.find(project => project.repository_name === repositoryName)
+      return projects.find(project => project.name === repositoryName || project.repository_name === repositoryName)
     })
-    .then(project => {
-      console.log(`${project.builds.length} build(s) found for ${project.repository_provider}:${project.repository_name}`)
+    .then(project => Codeship.builds.list(project.uuid).then(builds => ({ project, builds })))
+    .then(({ project, builds }) => {
+      console.log(`${builds.length} build(s) found for ${project.repository_provider}:${project.repository_name}`)
       console.log(`Filtering builds to target ${branchName}`)
-      const buildsMap = project.builds.reduce((builds, build) => {
+      const buildsMap = builds.reduce((builds, build) => {
         if (!includeTags && tagRegex.test(build.branch)) {
           return builds
         }
