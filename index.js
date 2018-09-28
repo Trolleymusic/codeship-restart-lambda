@@ -33,7 +33,8 @@ function restartLastBuild (repositoryName, branchName = 'master') {
   return Codeship.projects.list()
     .then(projects => {
       console.log(`${projects.length} project(s) found`)
-      return projects.find(project => project.name === repositoryName || project.repository_name === repositoryName)
+      const project = projects.find(project => project.name === repositoryName || project.repository_name === repositoryName)
+      return !project ? Promise.reject(new Error(`Project ${repositoryName} could not be found`)) : project
     })
     .then(project => Codeship.builds.list(project.uuid).then(builds => ({ project, builds })))
     .then(({ project, builds }) => {
