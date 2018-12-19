@@ -1,6 +1,6 @@
 {
   "name": "codeship-restart-lambda",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Restart the last build of a Codeship project using Lambda",
   "engines": {
     "node": ">=6.10.0"
