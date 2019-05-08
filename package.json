@@ -16,7 +16,7 @@
   "repository": "github:Trolleymusic/codeship-restart-lambda",
   "license": "ISC",
   "dependencies": {
-    "codeship-node-v2": "^0.0.4"
+    "codeship-node-v2": "^0.0.6"
   },
   "devDependencies": {
     "node-lambda": "^0.12.0",
